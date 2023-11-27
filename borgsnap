@@ -52,6 +52,9 @@
 #          example) will be created if it does not exist.
 #   Example: REMOTE=""
 #   Example: REMOTE="XXXX@YYYY.rsync.net:myhost"
+# REMOTE_RSH - The default value is ssh.  Override this if you need to set an ssh key file for remote config
+#   Example: REMOTE_RSH="ssh -i /path/to/private/key"
+#   See Also: https://borgbackup.readthedocs.io/en/stable/usage/general.html?highlight=rsh#environment-variables
 #
 # PASS - Path to a file containing a single line with the passphrase for borg
 #        encryption. I generate these with "pwgen 128 1 >/my/path/myhost.key".
@@ -158,8 +161,9 @@ readconfigfile() {
     export BORGPATH=$REMOTE_BORG_COMMAND
     echo "REMOTE_BORG_COMMAND set to $BORGPATH"
   fi
-
-
+  if [[ -n $REMOTE_RSH ]]; then
+    export BORG_RSH=$REMOTE_RSH
+  fi
 }
 
 findlast() {

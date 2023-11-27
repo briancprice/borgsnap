@@ -52,8 +52,8 @@
 #          example) will be created if it does not exist.
 #   Example: REMOTE=""
 #   Example: REMOTE="XXXX@YYYY.rsync.net:myhost"
-# REMOTE_RSH - The default value is ssh.  Override this if you need to set an ssh key file for remote config
-#   Example: REMOTE_RSH="ssh -i /path/to/private/key"
+# REMOTE_RSH - The default value is ssh.  Override this if you need to set an ssh key file and/or a port for remote config
+#   Example: REMOTE_RSH="ssh -p23 -i /path/to/private/key"
 #   See Also: https://borgbackup.readthedocs.io/en/stable/usage/general.html?highlight=rsh#environment-variables
 #
 # PASS - Path to a file containing a single line with the passphrase for borg
@@ -161,8 +161,10 @@ readconfigfile() {
     export BORGPATH=$REMOTE_BORG_COMMAND
     echo "REMOTE_BORG_COMMAND set to $BORGPATH"
   fi
+  SSH_COMMAND="ssh"
   if [[ -n $REMOTE_RSH ]]; then
     export BORG_RSH=$REMOTE_RSH
+    SSH_COMMAND=$REMOTE_RSH
   fi
 }
 
@@ -312,13 +314,18 @@ runBackup() {
     fi
     if [[ -n $rsyncdir ]]; then
       host=${REMOTE%:*}
+      echo "The host is: $host"
       dir=${REMOTE#*:}
       set +e
-      ssh "$host" test -d "$dir/$dataset"
-      if [[ $? == 1 ]]; then
+
+      # Some hosts, i.e. Hetzner allow a very limited set of ssh commands
+      # Instead of executing test or -d we use ls on the remote and grep the results locally
+      if $SSH_COMMAND "$host" "ls -R ${dir}" | grep -q -E ^"$dir/$dataset":$; then
+        echo "$dir/$dataset has already been initialized on $host"
+      else
         set -e
         echo "Initializing remote $rsyncdir"
-        ssh "$host" mkdir -p "$dir/$dataset"
+        $SSH_COMMAND "$host" mkdir -p "$dir/$dataset"
         borg init --encryption=repokey --remote-path=${BORGPATH} "$rsyncdir"
       fi
       set -e
@@ -399,12 +406,16 @@ backupSnapshot() {
     if [[ -n $rsyncdir ]]; then
       host=${REMOTE%:*}
       dir=${REMOTE#*:}
+
       set +e
-      ssh "$host" test -d "$dir/$dataset"
-      if [[ $? == 1 ]]; then
+      # Some hosts, i.e. Hetzner allow a very limited set of ssh commands
+      # Instead of executing test or -d we use ls on the remote and grep the results locally
+      if $SSH_COMMAND "$host" "ls -R ${dir}" | grep -q -E ^"$dir/$dataset":$; then
+        echo "$dir/$dataset has already been initialized on $host"
+      else
         set -e
         echo "Initializing remote $rsyncdir"
-        ssh "$host" mkdir -p "$dir/$dataset"
+        $SSH_COMMAND "$host" mkdir -p "$dir/$dataset"
         borg init --encryption=repokey --remote-path=${BORGPATH} "$rsyncdir"
       fi
       set -e
